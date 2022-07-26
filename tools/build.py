@@ -347,9 +347,7 @@ DEFAULT_NODE_MODULE_VERSION = '46'
 def detect_host_platform():
   """detect host architecture"""
   host_platform_name = platform.system().lower()
-  if host_platform_name == DARWIN:
-    return MAC
-  return host_platform_name
+  return MAC if host_platform_name == DARWIN else host_platform_name
 
 
 def detect_host_os():
@@ -366,10 +364,12 @@ def option_parser(args):
   parser = argparse.ArgumentParser()
 
   host_platform = detect_host_platform()
-  parser.add_argument('--target-platform',
-                      choices=[LINUX, ANDROID, IOS, MAC, WINDOWS],
-                      help='default platform: {}'.format(host_platform),
-                      default=host_platform)
+  parser.add_argument(
+      '--target-platform',
+      choices=[LINUX, ANDROID, IOS, MAC, WINDOWS],
+      help=f'default platform: {host_platform}',
+      default=host_platform,
+  )
 
   parser.add_argument('--target',
                       choices=[STELLITE_QUIC_SERVER_BIN,
@@ -409,13 +409,15 @@ def option_parser(args):
   if options.target == NODE_STELLITE:
     options.target_type = NODE_MODULE
 
-  if options.target in (STELLITE_HTTP_CLIENT):
-    if not options.target_type in (STATIC_LIBRARY, SHARED_LIBRARY):
-      print('invalid target type error')
-      sys.exit(1)
+  if options.target in (STELLITE_HTTP_CLIENT) and options.target_type not in (
+      STATIC_LIBRARY,
+      SHARED_LIBRARY,
+  ):
+    print('invalid target type error')
+    sys.exit(1)
 
   host_platform = detect_host_platform()
-  if options.target_platform in (IOS, MAC) and not host_platform == MAC:
+  if options.target_platform in (IOS, MAC) and host_platform != MAC:
     print('target must built on darwin/mac')
     sys.exit(1)
 
@@ -424,11 +426,11 @@ def option_parser(args):
     sys.exit(1)
 
   host_uname = platform.uname()[3].lower()
-  if options.target_platform == ANDROID and not UBUNTU in host_uname:
+  if options.target_platform == ANDROID and UBUNTU not in host_uname:
     print('android build must built on ubuntu/linux')
     sys.exit(1)
 
-  if not options.node_module_version in NODE_VERSIONS.iterkeys():
+  if options.node_module_version not in NODE_VERSIONS.iterkeys():
     print('{} is not supported node module version')
     sys.exit(1)
 
@@ -452,7 +454,7 @@ def build_object(options):
   if options.target_platform == WINDOWS:
     return WindowsBuild(**kwargs)
 
-  raise Exception('unsupported target_platform: {}'.format(options.target_type))
+  raise Exception(f'unsupported target_platform: {options.target_type}')
 
 
 def which_application(name):
@@ -568,8 +570,7 @@ class BuildObject(object):
     """return source code directory for build.
 
     it was getter from chromium essential code and code"""
-    return os.path.join(self.root_path,
-                        'build_{}'.format(self.target_platform))
+    return os.path.join(self.root_path, f'build_{self.target_platform}')
 
   @property
   def buildspace_src_path(self):
@@ -595,7 +596,7 @@ class BuildObject(object):
   @property
   def build_output_path(self):
     """return object file path that store a compiled files"""
-    out_dir = 'out_{}'.format(self.target_platform)
+    out_dir = f'out_{self.target_platform}'
     build = 'debug' if self.debug else 'release'
     return os.path.join(self.buildspace_src_path, out_dir, build)
 
@@ -612,8 +613,7 @@ class BuildObject(object):
   @property
   def node_root_path(self):
     """return node root directory"""
-    return os.path.join(self.third_party_path,
-                        'node_{}'.format(detect_host_platform()))
+    return os.path.join(self.third_party_path, f'node_{detect_host_platform()}')
 
   @property
   def node_path(self):
@@ -640,7 +640,7 @@ class BuildObject(object):
     if self._chromium_path:
       return self._chromium_path
 
-    chromium_dir = 'chromium_{}'.format(self.target_platform)
+    chromium_dir = f'chromium_{self.target_platform}'
     return os.path.join(self.third_party_path, chromium_dir)
 
   @property
@@ -706,9 +706,9 @@ class BuildObject(object):
     env = env or os.environ.copy()
     env_path = self.depot_tools_path
     if env.get('PATH'):
-      env_path = '{}:{}'.format(env.get('PATH'), self.depot_tools_path)
+      env_path = f"{env.get('PATH')}:{self.depot_tools_path}"
     env['PATH'] = env_path
-    print('Running: %s' % (' '.join(pipes.quote(x) for x in command)))
+    print(f"Running: {' '.join((pipes.quote(x) for x in command))}")
 
     job = subprocess.Popen(command, env=env, cwd=cwd)
     return job.wait() == 0
@@ -717,7 +717,7 @@ class BuildObject(object):
   def execute(self, command, env=None, cwd=None):
     """execute shell command"""
     res = self.execute_with_error(command, env=env, cwd=cwd)
-    if bool(res) == True:
+    if bool(res):
       return
 
     raise Exception('command execution are failed')
@@ -734,7 +734,7 @@ class BuildObject(object):
   def fetch_chromium(self):
     """fetch chromium"""
     if os.path.exists(self.chromium_path):
-      print('chromium is already exists: {}'.format(self.chromium_path))
+      print(f'chromium is already exists: {self.chromium_path}')
       return False
 
     os.makedirs(self.chromium_path)
@@ -765,26 +765,26 @@ class BuildObject(object):
 
   def install_node(self, temp_dir, node_tag, node_version):
     """install nodejs"""
-    if not self.target_platform in (MAC, LINUX):
+    if self.target_platform not in (MAC, LINUX):
       return
 
     if self.target_platform == MAC:
-      node_target = 'node-v{}-darwin-x64.tar.gz'.format(node_version)
+      node_target = f'node-v{node_version}-darwin-x64.tar.gz'
     elif self.target_platform == LINUX:
-      node_target = 'node-v{}-linux-x64.tar.gz'.format(node_version)
+      node_target = f'node-v{node_version}-linux-x64.tar.gz'
 
-    url = 'https://nodejs.org/dist/v{}/{}'.format(node_version, node_target)
-    print('fetch {}'.format(url))
+    url = f'https://nodejs.org/dist/v{node_version}/{node_target}'
+    print(f'fetch {url}')
 
     download_stream = urllib2.urlopen(url)
     temp_file = os.path.join(temp_dir, node_target)
     with open(temp_file, 'wb') as tar_stream:
       while True:
-        chunk = download_stream.read(2 ** 20)
-        if not chunk:
-          break
-        tar_stream.write(chunk)
+        if chunk := download_stream.read(2**20):
+          tar_stream.write(chunk)
 
+        else:
+          break
     with tarfile.open(temp_file) as tar_interface:
       tar_interface.extractall(path=temp_dir)
 
@@ -807,9 +807,9 @@ class BuildObject(object):
     """generate ninja build script using gn."""
     gn_options = gn_options or []
 
-    gn_args += '\nis_debug = {}\n'.format('true' if self.debug else 'false')
-    gn_args += '\nis_asan = {}\n'.format('true' if self.asan else 'false')
-    gn_args += '\nsymbol_level = {}\n'.format('1' if self.debug else '0')
+    gn_args += f"\nis_debug = {'true' if self.debug else 'false'}\n"
+    gn_args += f"\nis_asan = {'true' if self.asan else 'false'}\n"
+    gn_args += f"\nsymbol_level = {'1' if self.debug else '0'}\n"
 
     if not os.path.exists(self.build_output_path):
       os.makedirs(self.build_output_path)
@@ -851,13 +851,9 @@ class BuildObject(object):
     if not os.path.isdir(self.chromium_src_path):
       return False
 
-    if not os.path.exists(os.path.join(self.chromium_path, '.gclient')):
-      return False
-
-    if not os.path.exists(os.path.join(self.chromium_path, 'src', 'DEPS')):
-      return False
-
-    return True
+    return (
+        bool(os.path.exists(os.path.join(self.chromium_path, 'src', 'DEPS'))) if
+        os.path.exists(os.path.join(self.chromium_path, '.gclient')) else False)
 
   def read_chromium_branch(self):
     """read chromium git branch"""
@@ -895,7 +891,7 @@ class BuildObject(object):
     self.execute(['git', 'fetch', '--tags'], cwd=cwd)
     self.execute(['git', 'reset', '--hard'], cwd=cwd)
 
-    branch = 'chromium_{}'.format(self.chromium_tag)
+    branch = f'chromium_{self.chromium_tag}'
     if not self.execute_with_error(['git', 'checkout', branch], cwd=cwd):
       make_branch_command = ['git', 'checkout', '-b', branch, self.chromium_tag]
       self.execute(make_branch_command, cwd=cwd)
@@ -923,13 +919,13 @@ class BuildObject(object):
   def synchronize_buildspace(self):
     """synchronize code for building libchromium.a"""
     if not os.path.exists(self.buildspace_src_path):
-      print('make {} ...'.format(self.buildspace_src_path))
+      print(f'make {self.buildspace_src_path} ...')
       os.makedirs(self.buildspace_src_path)
 
     for target_dir in self.dependency_directories:
       if os.path.exists(os.path.join(self.buildspace_src_path, target_dir)):
         continue
-      print('copy chromium {} ...'.format(target_dir))
+      print(f'copy chromium {target_dir} ...')
       copy_tree(os.path.join(self.chromium_src_path, target_dir),
                 os.path.join(self.buildspace_src_path, target_dir))
 
@@ -998,7 +994,7 @@ class BuildObject(object):
 
   def build_target(self, target):
     if not target:
-      raise ValueError('invalid target: {}'.format(target))
+      raise ValueError(f'invalid target: {target}')
 
     command = ['ninja']
     if self.verbose:
@@ -1023,11 +1019,9 @@ class BuildObject(object):
     exclude_patterns = exclude_patterns or []
     for path, _, file_list in os.walk(root):
       for matched in fnmatch.filter(file_list, pattern):
-        is_exclude = False
-        for exclude_filename in exclude_patterns:
-          if exclude_filename in os.path.join(path, matched):
-            is_exclude = True
-            break
+        is_exclude = any(
+            exclude_filename in os.path.join(path, matched)
+            for exclude_filename in exclude_patterns)
         if is_exclude:
           continue
         res.append(os.path.join(path, matched))
@@ -1067,7 +1061,7 @@ class BuildObject(object):
 
     from_lib_java_dir = os.path.join(self.build_output_path, 'lib.java')
     if not os.path.exists(from_lib_java_dir):
-      raise Exception(from_lib_java_dir + ' is not exist error')
+      raise Exception(f'{from_lib_java_dir} is not exist error')
 
     for jar_file in self.pattern_files(from_lib_java_dir, '*.jar'):
       if jar_file.endswith('interface.jar'):
@@ -1085,7 +1079,7 @@ class AndroidBuild(BuildObject):
 
   @property
   def build_output_path(self):
-    out_dir = 'out_{}_{}'.format(self.target_platform, self.target_arch)
+    out_dir = f'out_{self.target_platform}_{self.target_arch}'
     return os.path.join(self.buildspace_path, 'src', out_dir, 'obj')
 
   @property
@@ -1110,7 +1104,7 @@ class AndroidBuild(BuildObject):
     if self.target_arch == 'x64':
       return 'x86_64'
 
-    raise Exception('unknown target architecture: {}'.format(self.target_arch))
+    raise Exception(f'unknown target architecture: {self.target_arch}')
 
   @property
   def android_toolchain_relative(self):
@@ -1126,7 +1120,7 @@ class AndroidBuild(BuildObject):
     if self.target_arch == 'x64':
       return 'x86_64-4.9'
 
-    raise Exception('unknown target architecture: {}'.format(self.target_arch))
+    raise Exception(f'unknown target architecture: {self.target_arch}')
 
   @property
   def android_libcpp_root(self):
@@ -1151,7 +1145,7 @@ class AndroidBuild(BuildObject):
     if self.target_arch == 'x64':
       return os.path.join(ndk_platforms_path, 'android-21', 'arch-x86_64')
 
-    raise Exception('unknown target error: {}'.format(self.target_arch))
+    raise Exception(f'unknown target error: {self.target_arch}')
 
   @property
   def android_ndk_lib_dir(self):
@@ -1161,7 +1155,7 @@ class AndroidBuild(BuildObject):
     if self.target_arch == 'x64':
       return os.path.join('usr', 'lib64')
 
-    raise Exception('unknown target architecture: {}'.format(self.target_arch))
+    raise Exception(f'unknown target architecture: {self.target_arch}')
 
   @property
   def android_ndk_lib(self):
@@ -1169,9 +1163,13 @@ class AndroidBuild(BuildObject):
 
   @property
   def android_toolchain_path(self):
-    return os.path.join(self.ndk_root_path, 'toolchains',
-                        self.android_toolchain_relative, 'prebuilt',
-                        '{}-{}'.format(detect_host_os(), detect_host_arch()))
+    return os.path.join(
+        self.ndk_root_path,
+        'toolchains',
+        self.android_toolchain_relative,
+        'prebuilt',
+        f'{detect_host_os()}-{detect_host_arch()}',
+    )
 
   @property
   def android_compiler_path(self):
@@ -1243,7 +1241,7 @@ class AndroidBuild(BuildObject):
     for target_dir in ANDROID_DEPENDENCY_DIRECTORIES:
       if os.path.exists(os.path.join(buildspace_src, target_dir)):
         continue
-      print('copy chromium {} ...'.format(target_dir))
+      print(f'copy chromium {target_dir} ...')
       copy_tree(os.path.join(self.chromium_src_path, target_dir),
                 os.path.join(buildspace_src, target_dir))
 
@@ -1257,9 +1255,7 @@ class AndroidBuild(BuildObject):
   def appendix_gn_args(self, arch):
     if arch == 'armv6':
       return 'arm_version = 6'
-    if arch == 'armv7':
-      return 'arm_version = 7'
-    return ''
+    return 'arm_version = 7' if arch == 'armv7' else ''
 
   def fetch_toolchain(self):
     self.write_gclient(GCLIENT_ANDROID)
@@ -1273,8 +1269,7 @@ class AndroidBuild(BuildObject):
       'rsc', os.path.join(self.build_output_path, library_name),
     ]
 
-    for filename in self.pattern_files(self.build_output_path, '*.o'):
-      command.append(filename)
+    command.extend(iter(self.pattern_files(self.build_output_path, '*.o')))
     self.execute(command)
 
     if not os.path.exists(output_dir):
@@ -1284,46 +1279,46 @@ class AndroidBuild(BuildObject):
 
   def link_shared_library(self, library_name, output_dir):
     command = [
-      self.clang_compiler_path,
-      '-Wl,-shared',
-      '-Wl,--fatal-warnings',
-      '-fPIC',
-      '-Wl,-z,noexecstack',
-      '-Wl,-z,now',
-      '-Wl,-z,relro',
-      '-Wl,-z,defs',
-      '-Wl,--as-needed',
-      '--gcc-toolchain={}'.format(self.android_toolchain_path),
-      '-fuse-ld=gold',
-      '-Wl,--icf=all',
-      '-Wl,--build-id=sha1',
-      '-Wl,--no-undefined',
-      '-Wl,--exclude-libs=libgcc.a',
-      '-Wl,--exclude-libs=libc++_static.a',
-      '-Wl,--exclude-libs=libvpx_assembly_arm.a',
-      '-Wl,',
-      '--target={}'.format(self.android_abi_target),
-      '-Wl,--warn-shared-textrel',
-      '-Wl,-O1',
-      '-Wl,-fdata-sections',
-      '-Wl,-ffunction-sections',
-      '-Wl,--gc-sections',
-      '-nostdlib',
-      '-Wl,--warn-shared-textrel',
-      '--sysroot={}'.format(self.android_ndk_sysroot),
-      '-Bdynamic',
-      '-Wl,-z,nocopyreloc',
-      '-Wl,-wrap,calloc',
-      '-Wl,-wrap,free',
-      '-Wl,-wrap,malloc',
-      '-Wl,-wrap,memalign',
-      '-Wl,-wrap,posix_memalign',
-      '-Wl,-wrap,pvalloc',
-      '-Wl,-wrap,realloc',
-      '-Wl,-wrap,valloc',
-      '-L{}'.format(self.android_libcpp_libs_dir),
-      '-Wl,-soname={}'.format(library_name),
-      os.path.join(self.android_ndk_lib, 'crtbegin_so.o'),
+        self.clang_compiler_path,
+        '-Wl,-shared',
+        '-Wl,--fatal-warnings',
+        '-fPIC',
+        '-Wl,-z,noexecstack',
+        '-Wl,-z,now',
+        '-Wl,-z,relro',
+        '-Wl,-z,defs',
+        '-Wl,--as-needed',
+        f'--gcc-toolchain={self.android_toolchain_path}',
+        '-fuse-ld=gold',
+        '-Wl,--icf=all',
+        '-Wl,--build-id=sha1',
+        '-Wl,--no-undefined',
+        '-Wl,--exclude-libs=libgcc.a',
+        '-Wl,--exclude-libs=libc++_static.a',
+        '-Wl,--exclude-libs=libvpx_assembly_arm.a',
+        '-Wl,',
+        f'--target={self.android_abi_target}',
+        '-Wl,--warn-shared-textrel',
+        '-Wl,-O1',
+        '-Wl,-fdata-sections',
+        '-Wl,-ffunction-sections',
+        '-Wl,--gc-sections',
+        '-nostdlib',
+        '-Wl,--warn-shared-textrel',
+        f'--sysroot={self.android_ndk_sysroot}',
+        '-Bdynamic',
+        '-Wl,-z,nocopyreloc',
+        '-Wl,-wrap,calloc',
+        '-Wl,-wrap,free',
+        '-Wl,-wrap,malloc',
+        '-Wl,-wrap,memalign',
+        '-Wl,-wrap,posix_memalign',
+        '-Wl,-wrap,pvalloc',
+        '-Wl,-wrap,realloc',
+        '-Wl,-wrap,valloc',
+        f'-L{self.android_libcpp_libs_dir}',
+        f'-Wl,-soname={library_name}',
+        os.path.join(self.android_ndk_lib, 'crtbegin_so.o'),
     ]
 
     objs = self.pattern_files(os.path.join(self.build_output_path, 'obj'),
@@ -1347,13 +1342,11 @@ class AndroidBuild(BuildObject):
     ])
 
     # armv6, armv7 arch leck of stack trace symbol in stl
-    if not self.target_arch in ('armv6', 'armv7'):
+    if self.target_arch not in ('armv6', 'armv7'):
       command.remove('-lunwind')
 
     if self.debug:
-      command.append('-fno-optimize-sibling-calls')
-      command.append('-fno-omit-frame-pointer')
-
+      command.extend(('-fno-optimize-sibling-calls', '-fno-omit-frame-pointer'))
     library_path = os.path.join(self.build_output_path, library_name)
     command.extend(['-o', library_path])
 
@@ -1393,13 +1386,13 @@ class AndroidBuild(BuildObject):
     for build in builds:
       output_dir = os.path.join(build.output_path, build.target_arch)
       if build.target_type == STATIC_LIBRARY:
-        build.link_static_library('lib{}.a'.format(self.target), output_dir)
+        build.link_static_library(f'lib{self.target}.a', output_dir)
 
       if build.target_type == SHARED_LIBRARY:
-        build.link_shared_library('lib{}.so'.format(self.target), output_dir)
+        build.link_shared_library(f'lib{self.target}.so', output_dir)
 
     self.copy_stellite_http_client_headers()
-    if len(builds) > 0:
+    if builds:
       builds[0].copy_chromium_java_deps()
 
   def clean(self):
@@ -1430,10 +1423,10 @@ class MacBuild(BuildObject):
       self.copy_stellite_http_client_headers()
 
     if self.target_type == SHARED_LIBRARY:
-      self.link_shared_library('lib{}.dylib'.format(self.target))
+      self.link_shared_library(f'lib{self.target}.dylib')
 
     if self.target_type == STATIC_LIBRARY:
-      self.link_static_library('lib{}.a'.format(self.target))
+      self.link_static_library(f'lib{self.target}.a')
 
     if self.target_type == NODE_MODULE:
       self.link_node_module()
@@ -1453,25 +1446,35 @@ class MacBuild(BuildObject):
       '-arch', 'x86_64',
     ]
 
-    for filename in self.pattern_files(self.build_output_path, '*.o',
-                                       MAC_EXCLUDE_OBJECTS):
-      command.append(filename)
-
+    command.extend(
+        iter(
+            self.pattern_files(self.build_output_path, '*.o',
+                               MAC_EXCLUDE_OBJECTS)))
     library_path = os.path.join(self.build_output_path, library_name)
     command.extend([
-      '-o', library_path,
-      '-install_name', '@loader_path/{}'.format(library_name),
-      '-stdlib=libc++',
-      '-lresolv',
-      '-lbsm',
-      '-framework', 'AppKit',
-      '-framework', 'ApplicationServices',
-      '-framework', 'Carbon',
-      '-framework', 'CoreFoundation',
-      '-framework', 'Foundation',
-      '-framework', 'IOKit',
-      '-framework', 'Security',
-      '-framework', 'SystemConfiguration'
+        '-o',
+        library_path,
+        '-install_name',
+        f'@loader_path/{library_name}',
+        '-stdlib=libc++',
+        '-lresolv',
+        '-lbsm',
+        '-framework',
+        'AppKit',
+        '-framework',
+        'ApplicationServices',
+        '-framework',
+        'Carbon',
+        '-framework',
+        'CoreFoundation',
+        '-framework',
+        'Foundation',
+        '-framework',
+        'IOKit',
+        '-framework',
+        'Security',
+        '-framework',
+        'SystemConfiguration',
     ])
     self.execute(command, cwd=self.build_output_path)
 
@@ -1483,10 +1486,9 @@ class MacBuild(BuildObject):
       raise Exception('libtool is not exist error')
 
     command = [ libtool_path, '-static', ]
-    for filename in self.pattern_files(self.build_output_path, '*.o',
-                                       MAC_EXCLUDE_OBJECTS):
-      command.append(os.path.join(self.build_output_path, filename))
-
+    command.extend(
+        os.path.join(self.build_output_path, filename) for filename in
+        self.pattern_files(self.build_output_path, '*.o', MAC_EXCLUDE_OBJECTS))
     library_path = os.path.join(self.build_output_path, library_name)
     command.extend([
       '-arch_only', 'x86_64',
@@ -1506,10 +1508,10 @@ class MacBuild(BuildObject):
       '-isysroot', self.mac_sdk_path,
       '-arch', 'x86_64',
     ]
-    for filename in self.pattern_files(self.build_output_path, '*.o',
-                                       MAC_EXCLUDE_OBJECTS):
-      command.append(filename)
-
+    command.extend(
+        iter(
+            self.pattern_files(self.build_output_path, '*.o',
+                               MAC_EXCLUDE_OBJECTS)))
     library_name = 'stellite.node'
     library_path = os.path.join(self.build_output_path, library_name)
     command.extend([
@@ -1551,7 +1553,7 @@ class IOSBuild(BuildObject):
 
   @property
   def build_output_path(self):
-    out_dir = 'out_{}_{}'.format(self.target_platform, self.target_arch)
+    out_dir = f'out_{self.target_platform}_{self.target_arch}'
     return os.path.join(self.buildspace_path, 'src', out_dir)
 
   @property
@@ -1602,33 +1604,35 @@ class IOSBuild(BuildObject):
         libs.append(build.link_shared_library())
 
     if build.target_type == STATIC_LIBRARY:
-      self.link_fat_library('lib{}.a'.format(self.target), libs)
+      self.link_fat_library(f'lib{self.target}.a', libs)
     elif build.target_type == SHARED_LIBRARY:
-      self.link_fat_library('lib{}.so'.format(self.target), libs)
+      self.link_fat_library(f'lib{self.target}.so', libs)
 
     self.copy_stellite_http_client_headers()
 
   def link_shared_library(self):
-    library_name = 'lib{}_{}.dylib'.format(self.target, self.target_arch)
+    library_name = f'lib{self.target}_{self.target_arch}.dylib'
 
     sdk_path = self.iphone_sdk_path
     if self.target_arch in ('x86', 'x64'):
       sdk_path = self.simulator_sdk_path
 
     command = [
-      self.clang_compiler_path,
-      '-shared',
-      '-Wl,-search_paths_first',
-      '-Wl,-dead_strip',
-      '-miphoneos-version-min=9.0',
-      '-isysroot', sdk_path,
-      '-arch', self.clang_target_arch,
-      '-install_name', '@loader_path/{}'.format(library_name),
+        self.clang_compiler_path,
+        '-shared',
+        '-Wl,-search_paths_first',
+        '-Wl,-dead_strip',
+        '-miphoneos-version-min=9.0',
+        '-isysroot',
+        sdk_path,
+        '-arch',
+        self.clang_target_arch,
+        '-install_name',
+        f'@loader_path/{library_name}',
     ]
-    for filename in self.pattern_files(self.build_output_path, '*.o',
-                                       IOS_EXCLUDE_OBJECTS):
-      command.append('-Wl,-force_load,{}'.format(filename))
-
+    command.extend(f'-Wl,-force_load,{filename}'
+                   for filename in self.pattern_files(
+                       self.build_output_path, '*.o', IOS_EXCLUDE_OBJECTS))
     library_path = os.path.join(self.build_output_path, library_name)
     command.extend([
       '-o', library_path,
@@ -1648,7 +1652,7 @@ class IOSBuild(BuildObject):
     return library_path
 
   def link_static_library(self):
-    library_name = 'lib{}_{}.a'.format(self.target, self.target_arch)
+    library_name = f'lib{self.target}_{self.target_arch}.a'
 
     libtool_path = which_application('libtool')
     if not libtool_path:
@@ -1658,10 +1662,9 @@ class IOSBuild(BuildObject):
       libtool_path,
       '-static',
     ]
-    for filename in self.pattern_files(self.build_output_path, '*.o',
-                                       IOS_EXCLUDE_OBJECTS):
-      command.append(os.path.join(self.build_output_path, filename))
-
+    command.extend(
+        os.path.join(self.build_output_path, filename) for filename in
+        self.pattern_files(self.build_output_path, '*.o', IOS_EXCLUDE_OBJECTS))
     library_path = os.path.join(self.build_output_path, library_name)
     command.extend([
       '-arch_only', self.clang_target_arch,
@@ -1726,48 +1729,50 @@ class LinuxBuild(BuildObject):
                    self.output_path)
 
   def link_static_library(self):
-    library_name = 'lib{}.a'.format(self.target)
+    library_name = f'lib{self.target}.a'
     library_path = os.path.join(self.build_output_path, library_name)
 
     command = [ 'ar', 'rsc', library_path, ]
-    for filename in self.pattern_files(self.build_output_path, '*.a',
-                                       LINUX_EXCLUDE_OBJECTS):
-      command.append(filename)
+    command.extend(
+        iter(
+            self.pattern_files(self.build_output_path, '*.a',
+                               LINUX_EXCLUDE_OBJECTS)))
     self.execute(command)
 
     shutil.copy2(library_path, self.output_path)
 
   def link_shared_library(self):
-    library_name = 'lib{}.so'.format(self.target)
+    library_name = f'lib{self.target}.so'
     library_path = os.path.join(self.build_output_path, library_name)
 
     command = [
-      self.clang_compiler_path,
-      '-shared',
-      '-fPIC',
-      '-fuse-ld=gold',
-      '-m64',
-      '-pthread',
-      '-Wl,--as-needed',
-      '-Wl,--export-dynamic',
-      '-Wl,--fatal-warnings',
-      '-Wl,--icf=all',
-      '-Wl,--no-as-needed',
-      '-Wl,-z,noexecstack',
-      '-Wl,-z,now',
-      '-Wl,-z,relro',
-      '-lpthread',
-      '-o', library_path,
-      '-Wl,-soname="{}"'.format(library_name),
-      '-Wl,--gc-sections',
-      '-Wl,-whole-archive',
-      '-Wl,--start-group',
+        self.clang_compiler_path,
+        '-shared',
+        '-fPIC',
+        '-fuse-ld=gold',
+        '-m64',
+        '-pthread',
+        '-Wl,--as-needed',
+        '-Wl,--export-dynamic',
+        '-Wl,--fatal-warnings',
+        '-Wl,--icf=all',
+        '-Wl,--no-as-needed',
+        '-Wl,-z,noexecstack',
+        '-Wl,-z,now',
+        '-Wl,-z,relro',
+        '-lpthread',
+        '-o',
+        library_path,
+        f'-Wl,-soname="{library_name}"',
+        '-Wl,--gc-sections',
+        '-Wl,-whole-archive',
+        '-Wl,--start-group',
     ]
 
-    for filename in self.pattern_files(self.build_output_path, '*.o',
-                                       LINUX_EXCLUDE_OBJECTS):
-      command.append(filename)
-
+    command.extend(
+        iter(
+            self.pattern_files(self.build_output_path, '*.o',
+                               LINUX_EXCLUDE_OBJECTS)))
     command.extend([
       '-lnssutil3',
       '-latomic',
@@ -1799,33 +1804,34 @@ class LinuxBuild(BuildObject):
     library_path = os.path.join(self.build_output_path, library_name)
 
     command = [
-      self.clang_compiler_path,
-      '-fPIC',
-      '-fuse-ld=gold',
-      '-m64',
-      '-rdynamic',
-      '-shared',
-      '-pthread',
-      '-o', library_path,
-      '-Wl,--as-needed',
-      '-Wl,--export-dynamic',
-      '-Wl,--fatal-warnings',
-      '-Wl,--icf=all',
-      '-Wl,--no-as-needed',
-      '-Wl,-dead_strip',
-      '-Wl,-search_paths_first',
-      '-Wl,-z,noexecstack',
-      '-Wl,-z,now',
-      '-Wl,-z,relro',
-      '-Wl,-soname={}'.format(library_name),
-      '-Wl,--gc-sections',
-      '-Wl,-whole-archive',
-      '-Wl,--start-group',
+        self.clang_compiler_path,
+        '-fPIC',
+        '-fuse-ld=gold',
+        '-m64',
+        '-rdynamic',
+        '-shared',
+        '-pthread',
+        '-o',
+        library_path,
+        '-Wl,--as-needed',
+        '-Wl,--export-dynamic',
+        '-Wl,--fatal-warnings',
+        '-Wl,--icf=all',
+        '-Wl,--no-as-needed',
+        '-Wl,-dead_strip',
+        '-Wl,-search_paths_first',
+        '-Wl,-z,noexecstack',
+        '-Wl,-z,now',
+        '-Wl,-z,relro',
+        f'-Wl,-soname={library_name}',
+        '-Wl,--gc-sections',
+        '-Wl,-whole-archive',
+        '-Wl,--start-group',
     ]
-    for filename in self.pattern_files(self.build_output_path, '*.o',
-                                       LINUX_EXCLUDE_OBJECTS):
-      command.append(filename)
-
+    command.extend(
+        iter(
+            self.pattern_files(self.build_output_path, '*.o',
+                               LINUX_EXCLUDE_OBJECTS)))
     command.extend([
       '-lnssutil3',
       '-latomic',
@@ -1935,7 +1941,7 @@ class WindowsBuild(BuildObject):
     job.wait()
     stdout = job.stdout.read().strip()
 
-    toolchain = dict()
+    toolchain = {}
     for toolchain_line in stdout.split('\n'):
       unpacked = map(lambda x : x.strip().lower(), toolchain_line.split('='))
       if len(unpacked) != 2:
@@ -1949,7 +1955,7 @@ class WindowsBuild(BuildObject):
     self._runtime_dirs = toolchain.get('runtime_dirs').split(';')
 
   def execute_with_error(self, command, cwd=None, env=None):
-    print('Running: %s' % (' '.join(pipes.quote(x) for x in command)))
+    print(f"Running: {' '.join((pipes.quote(x) for x in command))}")
 
     env = env or os.environ.copy()
     env['DEPOT_TOOLS_WIN_TOOLCHAIN'] = '0'
@@ -2004,7 +2010,7 @@ def main(args):
 
   build = build_object(options)
   if not build.check_target_platform():
-    print('invalid platform error: {}'.format(options.target_platform))
+    print(f'invalid platform error: {options.target_platform}')
     sys.exit(1)
 
   if options.action == CLEAN:

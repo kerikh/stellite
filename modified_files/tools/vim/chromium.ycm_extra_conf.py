@@ -75,7 +75,7 @@ def PathExists(*args):
 def GetExistStelliteBuildspace(curdir):
   platforms = ['ios', 'mac', 'android', 'linux', 'windows']
   for platform in platforms:
-    buildspace_path = os.path.join(curdir, 'build_{}'.format(platform))
+    buildspace_path = os.path.join(curdir, f'build_{platform}')
     if os.path.exists(buildspace_path):
       return buildspace_path
   return None
@@ -116,10 +116,9 @@ def GetDefaultSourceFile(chrome_root, filename):
   blink_root = os.path.join(chrome_root, 'third_party', 'WebKit')
   if filename.startswith(blink_root):
     return os.path.join(blink_root, 'Source', 'core', 'Init.cpp')
-  else:
-    if 'test.' in filename:
-      return os.path.join(chrome_root, 'base', 'logging_unittest.cc')
-    return os.path.join(chrome_root, 'base', 'logging.cc')
+  if 'test.' in filename:
+    return os.path.join(chrome_root, 'base', 'logging_unittest.cc')
+  return os.path.join(chrome_root, 'base', 'logging.cc')
 
 
 def GetBuildableSourceFile(chrome_root, filename):
@@ -211,13 +210,8 @@ def GetClangCommandLineForNinjaOutput(out_dir, build_target):
   if p.returncode != 0:
     return None
 
-  # Ninja will return multiple build steps for all dependencies up to
-  # |build_target|. The build step we want is the last Clang invocation, which
-  # is expected to be the one that outputs |build_target|.
-  for line in reversed(stdout.split('\n')):
-    if 'clang' in line:
-      return line
-  return None
+  return next(
+      (line for line in reversed(stdout.split('\n')) if 'clang' in line), None)
 
 
 def GetClangCommandLineFromNinjaForSource(out_dir, filename):
@@ -239,8 +233,8 @@ def GetClangCommandLineFromNinjaForSource(out_dir, filename):
   """
   build_targets = GetNinjaBuildOutputsForSourceFile(out_dir, filename)
   for build_target in build_targets:
-    command_line = GetClangCommandLineForNinjaOutput(out_dir, build_target)
-    if command_line:
+    if command_line := GetClangCommandLineForNinjaOutput(
+        out_dir, build_target):
       return command_line
   return None
 
@@ -271,11 +265,11 @@ def GetClangOptionsFromCommandLine(clang_commandline, out_dir,
         clang_flags.append(flag)
       else:
         abs_path = os.path.normpath(os.path.join(out_dir, flag[2:]))
-        clang_flags.append('-I' + abs_path)
+        clang_flags.append(f'-I{abs_path}')
     elif flag.startswith('-std'):
       clang_flags.append(flag)
     elif flag.startswith('-') and flag[1] in 'DWFfmO':
-      if flag == '-Wno-deprecated-register' or flag == '-Wno-header-guard':
+      if flag in ['-Wno-deprecated-register', '-Wno-header-guard']:
         # These flags causes libclang (3.3) to crash. Remove it until things
         # are fixed.
         continue
@@ -293,7 +287,7 @@ def GetClangOptionsFromCommandLine(clang_commandline, out_dir,
         clang_flags.append(flag)
       else:
         abs_path = os.path.normpath(os.path.join(out_dir, sysroot_path))
-        clang_flags.append('--sysroot=' + abs_path)
+        clang_flags.append(f'--sysroot={abs_path}')
   return clang_flags
 
 
@@ -319,13 +313,10 @@ def GetClangOptionsFromNinjaForFilename(chrome_root, filename):
 
   # Generally, everyone benefits from including Chromium's src/, because all of
   # Chromium's includes are relative to that.
-  additional_flags = ['-I' + os.path.join(chrome_root)]
-
-  # Version of Clang used to compile Chromium can be newer then version of
-  # libclang that YCM uses for completion. So it's possible that YCM's libclang
-  # doesn't know about some used warning options, which causes compilation
-  # warnings (and errors, because of '-Werror');
-  additional_flags.append('-Wno-unknown-warning-option')
+  additional_flags = [
+      f'-I{os.path.join(chrome_root)}',
+      '-Wno-unknown-warning-option',
+  ]
 
   sys.path.append(os.path.join(chrome_root, 'tools', 'vim'))
   from ninja_output import GetNinjaOutputDirectory
@@ -340,10 +331,8 @@ def GetClangOptionsFromNinjaForFilename(chrome_root, filename):
     clang_line = GetClangCommandLineFromNinjaForSource(
         out_dir, GetDefaultSourceFile(chrome_root, filename))
 
-  if not clang_line:
-    return additional_flags
-
-  return GetClangOptionsFromCommandLine(clang_line, out_dir, additional_flags)
+  return (GetClangOptionsFromCommandLine(clang_line, out_dir, additional_flags)
+          if clang_line else additional_flags)
 
 
 def FlagsForFile(filename):

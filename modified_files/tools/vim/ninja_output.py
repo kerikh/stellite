@@ -36,9 +36,9 @@ def GetNinjaOutputDirectory(chrome_root):
         output_dirs = [name_value[1]]
   if not output_dirs:
     for f in os.listdir(chrome_root):
-      if re.match(r'out(\b|_)', f):
-        if os.path.isdir(os.path.join(chrome_root, f)):
-          output_dirs.append(f)
+      if re.match(r'out(\b|_)', f) and os.path.isdir(
+          os.path.join(chrome_root, f)):
+        output_dirs.append(f)
 
   def generate_paths():
     for out_dir in output_dirs:
@@ -62,4 +62,3 @@ def GetNinjaOutputDirectory(chrome_root):
 if __name__ == '__main__':
   if len(sys.argv) != 2:
     raise exceptions.RuntimeError('Expected a single path argument.')
-  print GetNinjaOutputDirectory(sys.argv[1])
